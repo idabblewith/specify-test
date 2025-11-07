@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: herbarium-specify
+
+# Reference the base
+resources:
+- ../../base
+
+# Generate secrets from .env file
+secretGenerator:
+- name: specify-secrets
+  envs:
+  - .env
+  options:
+    disableNameSuffixHash: true
+
+# Apply patches
+patches:
+- path: deployment-patch.yaml
+  target:
+    kind: Deployment
+    name: specify
+- path: ingress-patch.yaml
+  target:
+    kind: Ingress
+    name: specify-ingress
+- path: pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: specify-storage
+
+# Add labels to all resources
+labels:
+- pairs:
+    environment: dev
+    managed-by: kustomize
+
+# Add common annotations
+annotations:
+- pairs:
+    version: v7.11.2

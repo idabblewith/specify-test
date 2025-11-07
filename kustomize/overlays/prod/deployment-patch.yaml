@@ -1,0 +1,41 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: specify
+spec:
+  replicas: 2  # More replicas for high availability
+  template:
+    spec:
+      containers:
+      - name: specify
+        env:
+        - name: SP7_DEBUG
+          value: "false"
+        - name: LOG_LEVEL
+          value: "WARNING"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: specify-worker
+spec:
+  replicas: 2  # Scale workers for production
+  template:
+    spec:
+      containers:
+      - name: specify-worker
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"

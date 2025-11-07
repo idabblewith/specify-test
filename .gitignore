@@ -8,6 +8,11 @@ RANCHER_ENVIRONMENT_VARIABLES.md
 .github/workflows/
 docker-compose-reference.yml
 README.md
+buddy-kustomize/
+testing
+reference-compose
+docker-comps
+spmsreference
 
 # IDE and editor files
 .vscode/

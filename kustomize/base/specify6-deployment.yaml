@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: specify6
+  labels:
+    app: specify
+    component: specify6
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: specify
+      component: specify6
+  template:
+    metadata:
+      labels:
+        app: specify
+        component: specify6
+    spec:
+      containers:
+      - name: specify6
+        image: specifyconsortium/specify6-service:6.8.03
+        env:
+        - name: TZ
+          value: "Australia/Perth"
+        volumeMounts:
+        - name: specify6
+          mountPath: /volumes/Specify
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: specify6
+        persistentVolumeClaim:
+          claimName: specify-storage

@@ -1,36 +1,46 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-nameSuffix: -prod
+namespace: herbarium-specify
 
-secretGenerator:
-  - name: specify-secrets
-    type: Opaque
-    envs:
-      - .env
-
-configMapGenerator:
-  - name: nginx-config
-    files:
-      - default.conf
-
-generatorOptions:
-  disableNameSuffixHash: true
-
+# Reference the base
 resources:
-  - ../../base
-  - pvcs.yaml
+- ../../base
 
-labels:
-  - includeSelectors: true
-    pairs:
-      variant: prod
+# Generate secrets from .env file
+secretGenerator:
+- name: specify-secrets
+  envs:
+  - .env
+  options:
+    disableNameSuffixHash: true
 
+# Apply patches
 patches:
-  - path: deployment_patch.yaml
-  - path: deployment_hpa_patch.yaml
-  - path: service_patch.yaml
+- path: deployment-patch.yaml
+  target:
+    kind: Deployment
+    name: specify
+- path: deployment-patch.yaml
+  target:
+    kind: Deployment
+    name: specify-worker
+- path: ingress-patch.yaml
+  target:
+    kind: Ingress
+    name: specify-ingress
+- path: pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: specify-storage
 
-images:
-  - name: specifyconsortium/specify7-service
-    newTag: v7.11.2
+# Add labels to all resources
+labels:
+- pairs:
+    environment: prod
+    managed-by: kustomize
+
+# Add common annotations
+annotations:
+- pairs:
+    version: v7.11.2
