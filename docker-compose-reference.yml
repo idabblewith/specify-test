@@ -1,0 +1,245 @@
+# Docker Compose Reference for Specify Application Stack
+#
+# This file serves as a reference for the original Docker Compose configuration
+# that has been migrated to Kubernetes using Kustomize. It combines all services
+# from the original three docker-compose files into a single reference.
+#
+# Kubernetes Migration Mapping:
+# - Each service below corresponds to a Deployment in kustomize/base/deployment.yaml
+# - Service networking is handled by Services in kustomize/base/service.yaml
+# - Horizontal Pod Autoscaling is configured in kustomize/base/deployment_hpa.yaml
+# - Volumes are mapped to PersistentVolumeClaims in kustomize/overlays/*/pvcs.yaml
+# - Environment variables are managed via secretGenerator in overlay configurations
+# - Nginx configuration is handled via configMapGenerator in overlay configurations
+# - Environment-specific patches are applied via kustomize/overlays/*/deployment_patch.yaml
+
+version: "3.8"
+
+services:
+  # Main Specify7 web application
+  # Kubernetes: specify-app-deployment
+  specify:
+    container_name: specify
+    restart: unless-stopped
+    image: specifyconsortium/specify7-service:v7.11.2
+    platform: linux/arm64/v8
+    init: true
+    networks:
+      - specify_network
+    volumes:
+      - "specify6:/opt/Specify:ro" # K8s: specify6-pvc (ReadWriteMany)
+      - "static-files:/volumes/static-files" # K8s: static-files-pvc (ReadWriteMany)
+    environment:
+      # Database connection (external to Kubernetes cluster)
+      - DATABASE_HOST=host.docker.internal
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=specify
+      - MASTER_NAME=specify
+      - MASTER_PASSWORD=leila-miser-peeps
+      - SECRET_KEY=change this to some unique random string
+      # Asset server connection (internal service in K8s)
+      - ASSET_SERVER_URL=http://asset-server-service:8080/web_asset_store.xml
+      - ASSET_SERVER_KEY=your asset server access key
+      # Report runner connection (internal service in K8s)
+      - REPORT_RUNNER_HOST=report-runner-service
+      - REPORT_RUNNER_PORT=8088
+      # Redis connection (internal service in K8s)
+      - CELERY_BROKER_URL=redis://redis-service:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis-service:6379/1
+      - LOG_LEVEL=WARNING
+      - SP7_DEBUG=true
+      - TZ=Australia/Perth
+      - SPECIFY_CONFIG_DIR=/opt/specify7/config
+      - ALLOWED_HOSTS=*
+      - CSRF_TRUSTED_ORIGINS=http://localhost:8086
+    ports:
+      - "8000:8000" # K8s: Internal service, exposed via nginx-service
+
+  # Celery worker for background tasks
+  # Kubernetes: specify-worker-deployment
+  specify-worker:
+    container_name: specify-worker
+    restart: unless-stopped
+    image: specifyconsortium/specify7-service:v7.11.2
+    platform: linux/arm64/v8
+    command: ve/bin/celery -A specifyweb worker -l INFO --concurrency=1
+    init: true
+    networks:
+      - specify_network
+    volumes:
+      - "specify6:/opt/Specify:ro" # K8s: specify6-pvc (ReadWriteMany)
+      - "static-files:/volumes/static-files" # K8s: static-files-pvc (ReadWriteMany)
+    environment:
+      # Same environment variables as main application
+      - DATABASE_HOST=host.docker.internal
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=specify
+      - MASTER_NAME=specify
+      - MASTER_PASSWORD=leila-miser-peeps
+      - SECRET_KEY=change this to some unique random string
+      - ASSET_SERVER_URL=http://asset-server-service:8080/web_asset_store.xml
+      - ASSET_SERVER_KEY=your asset server access key
+      - REPORT_RUNNER_HOST=report-runner-service
+      - REPORT_RUNNER_PORT=8088
+      - CELERY_BROKER_URL=redis://redis-service:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis-service:6379/1
+      - LOG_LEVEL=WARNING
+      - SP7_DEBUG=true
+      - TZ=Australia/Perth
+      - SPECIFY_CONFIG_DIR=/opt/specify7/config
+      - ALLOWED_HOSTS=*
+      - CSRF_TRUSTED_ORIGINS=http://localhost:8086
+
+  # Specify6 compatibility service (provides files to other services)
+  # Kubernetes: specify6-deployment
+  specify6:
+    container_name: specify6
+    image: specifyconsortium/specify6-service:6.8.03
+    platform: linux/arm64
+    networks:
+      - specify_network
+    volumes:
+      - "specify6:/volumes/Specify" # K8s: specify6-pvc (ReadWriteMany)
+    environment:
+      - TZ=Australia/Perth
+
+  # Nginx reverse proxy and static file server
+  # Kubernetes: nginx-deployment with ConfigMap for configuration
+  nginx:
+    container_name: nginx
+    restart: unless-stopped
+    image: nginx:1-trixie
+    platform: linux/arm64/v8
+    ports:
+      - "8086:80" # K8s: Internal service (nginx-service), external access via ingress if configured
+    networks:
+      - specify_network
+    volumes:
+      - "static-files:/volumes/static-files:ro" # K8s: static-files-pvc (ReadWriteMany)
+      - "specify6:/volumes/specify6:ro" # K8s: specify6-pvc (ReadWriteMany)
+      - "./nginx/specify.conf:/etc/nginx/conf.d/default.conf:ro" # K8s: nginx-config ConfigMap (generated from default.conf)
+    environment:
+      - TZ=Australia/Perth
+
+  # Redis for Celery message broker and result backend
+  # Kubernetes: redis-deployment with persistent storage
+  redis:
+    container_name: redis
+    restart: unless-stopped
+    image: redis:6.0
+    platform: linux/arm64/v8
+    networks:
+      - specify_network
+    volumes:
+      - "redis-data:/data" # K8s: redis-data-pvc (ReadWriteOnce)
+    environment:
+      - TZ=Australia/Perth
+    ports:
+      - "6379:6379" # K8s: Internal service only (redis-service)
+
+  # Asset server for file attachments
+  # Kubernetes: asset-server-deployment
+  specify-asset-server:
+    container_name: specify-asset-server
+    image: specifyconsortium/specify-asset-service:latest
+    init: true
+    restart: always
+    platform: linux/amd64
+    networks:
+      - specify_network
+    volumes:
+      - "attachments:/home/specify/attachments" # K8s: attachments-pvc (ReadWriteOnce)
+    environment:
+      - SERVER_NAME=asset-server-service # K8s: Internal service name
+      - SERVER_PORT=8080
+      - ATTACHMENT_KEY=your asset server access key
+      - DEBUG_MODE=false
+      - TZ=Australia/Perth
+    ports:
+      - "8087:8080" # K8s: Internal service only (asset-server-service)
+
+  # Report runner service
+  # Kubernetes: report-runner-deployment
+  report-runner:
+    container_name: specify-report-runner
+    image: specifyconsortium/report-runner:latest
+    restart: always
+    platform: linux/amd64
+    networks:
+      - specify_network
+    environment:
+      - SERVER_NAME=report-runner-service # K8s: Internal service name
+      - SERVER_PORT=8088
+      - TZ=Australia/Perth
+    ports:
+      - "8088:8088" # K8s: Internal service only (report-runner-service)
+
+networks:
+  specify_network:
+    name: specify_network
+    driver: bridge
+    # Kubernetes: Services provide internal networking via DNS resolution
+
+volumes:
+  attachments: # K8s: attachments-pvc in overlays/*/pvcs.yaml (ReadWriteOnce, 10Gi test, 100Gi prod)
+  database: # K8s: External database, not managed by Kubernetes
+  specify6: # K8s: specify6-pvc in overlays/*/pvcs.yaml (ReadWriteMany, 5Gi)
+  static-files: # K8s: static-files-pvc in overlays/*/pvcs.yaml (ReadWriteMany, 2Gi)
+  redis-data: # K8s: redis-data-pvc in overlays/*/pvcs.yaml (ReadWriteOnce, 1Gi test, 5Gi prod)
+
+# Kubernetes Migration Notes:
+#
+# 1. Kustomize Structure:
+#    - Base resources in kustomize/base/ (deployment.yaml, service.yaml, deployment_hpa.yaml)
+#    - Environment-specific overlays in kustomize/overlays/test/ and kustomize/overlays/prod/
+#    - Strategic merge patches for environment customization
+#    - secretGenerator for environment variables from .env files
+#    - configMapGenerator for nginx configuration from default.conf files
+#
+# 2. Service Discovery:
+#    - Docker Compose uses service names for internal communication
+#    - Kubernetes uses Service DNS names with environment suffixes:
+#      * Test: specify-app-service-test, redis-service-test, etc.
+#      * Prod: specify-app-service-prod, redis-service-prod, etc.
+#
+# 3. Environment Isolation:
+#    - Each environment gets its own namespace and resource suffix
+#    - Services use variant labels (variant: test, variant: prod) for proper selection
+#    - Environment-specific resource limits and scaling via patches
+#
+# 4. Storage Management:
+#    - Docker Compose uses named volumes
+#    - Kubernetes uses PersistentVolumeClaims defined in overlay pvcs.yaml files
+#    - Environment-specific storage sizes (test: smaller, prod: larger)
+#
+# 5. Configuration Management:
+#    - Docker Compose uses environment variables and bind mounts
+#    - Kubernetes uses:
+#      * secretGenerator with .env files for sensitive data
+#      * configMapGenerator with default.conf for nginx configuration
+#      * Strategic merge patches for environment-specific settings
+#
+# 6. Scaling and Performance:
+#    - Docker Compose requires manual scaling
+#    - Kubernetes provides:
+#      * HorizontalPodAutoscaler for automatic scaling (base/deployment_hpa.yaml)
+#      * Environment-specific scaling limits via deployment_hpa_patch.yaml
+#      * Resource requests/limits via deployment_patch.yaml
+#
+# 7. Health Monitoring:
+#    - Docker Compose relies on container restart policies
+#    - Kubernetes provides comprehensive health probes:
+#      * Liveness probes for container health
+#      * Readiness probes for service availability
+#      * Different probe types: httpGet, tcpSocket, exec
+#
+# 8. Deployment Process:
+#    - Docker Compose: docker-compose up
+#    - Kubernetes: kubectl apply -k kustomize/overlays/test (or prod)
+#    - Validation: kubectl kustomize kustomize/overlays/test
+#
+# 9. Organizational Compliance:
+#    - Follows organizational Kustomize standards (base/overlays pattern)
+#    - Uses strategic merge patches for customization
+#    - Implements proper labeling with variant labels
+#    - Matches structure of biosysreference and scienceprojectsreference

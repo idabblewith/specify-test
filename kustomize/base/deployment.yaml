@@ -1,0 +1,618 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: specify-app-deployment
+  labels:
+    app: specify-app-deployment
+spec:
+  selector:
+    matchLabels:
+      app: specify-app-deployment
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: specify-app-deployment
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: specify-app
+        image: specifyconsortium/specify7-service:v7.11.2
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: false
+        env:
+        - name: TZ
+          value: "Australia/Perth"
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DATABASE_HOST
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DATABASE_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DATABASE_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DATABASE_PASSWORD
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: SECRET_KEY
+        - name: DEBUG
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DEBUG
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: REDIS_URL
+        - name: ASSET_SERVER_URL
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: ASSET_SERVER_URL
+        - name: ASSET_SERVER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: ASSET_SERVER_KEY
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /accounts/login/
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/specify/user/
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 2
+        volumeMounts:
+        - name: specify6-volume
+          mountPath: /opt/Specify6
+        - name: static-files-volume
+          mountPath: /opt/Specify7/specifyweb/frontend/static
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: specify6-volume
+        persistentVolumeClaim:
+          claimName: specify6-pvc
+      - name: static-files-volume
+        persistentVolumeClaim:
+          claimName: static-files-pvc
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 100Mi
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: specify-worker-deployment
+  labels:
+    app: specify-worker-deployment
+spec:
+  selector:
+    matchLabels:
+      app: specify-worker-deployment
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: specify-worker-deployment
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: specify-worker
+        image: specifyconsortium/specify7-service:v7.11.2
+        imagePullPolicy: Always
+        command: ["ve/bin/celery", "-A", "specifyweb", "worker", "-l", "INFO", "--concurrency=1"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: false
+        env:
+        - name: TZ
+          value: "Australia/Perth"
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DATABASE_HOST
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DATABASE_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DATABASE_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DATABASE_PASSWORD
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: SECRET_KEY
+        - name: DEBUG
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: DEBUG
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: REDIS_URL
+        - name: ASSET_SERVER_URL
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: ASSET_SERVER_URL
+        - name: ASSET_SERVER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: specify-secrets
+              key: ASSET_SERVER_KEY
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "ve/bin/celery -A specifyweb inspect ping -d celery@$HOSTNAME"
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "ve/bin/celery -A specifyweb inspect ping -d celery@$HOSTNAME"
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 2
+        volumeMounts:
+        - name: specify6-volume
+          mountPath: /opt/Specify6
+        - name: static-files-volume
+          mountPath: /opt/Specify7/specifyweb/frontend/static
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: specify6-volume
+        persistentVolumeClaim:
+          claimName: specify6-pvc
+      - name: static-files-volume
+        persistentVolumeClaim:
+          claimName: static-files-pvc
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 100Mi
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deployment
+  labels:
+    app: redis-deployment
+spec:
+  selector:
+    matchLabels:
+      app: redis-deployment
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: redis-deployment
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+      - name: redis
+        image: redis:6.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 6379
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: false
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        volumeMounts:
+        - name: redis-data-volume
+          mountPath: /data
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: redis-data-volume
+        persistentVolumeClaim:
+          claimName: redis-data-pvc
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 50Mi
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx-deployment
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: nginx-deployment
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+      containers:
+      - name: nginx
+        image: nginx:1-trixie
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: false
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        - name: static-files-volume
+          mountPath: /usr/share/nginx/html/static
+        - name: specify6-volume
+          mountPath: /usr/share/nginx/html/specify6
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: var-cache-nginx
+          mountPath: /var/cache/nginx
+        - name: var-run
+          mountPath: /var/run
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-config
+      - name: static-files-volume
+        persistentVolumeClaim:
+          claimName: static-files-pvc
+      - name: specify6-volume
+        persistentVolumeClaim:
+          claimName: specify6-pvc
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 50Mi
+      - name: var-cache-nginx
+        emptyDir:
+          medium: Memory
+          sizeLimit: 50Mi
+      - name: var-run
+        emptyDir:
+          medium: Memory
+          sizeLimit: 10Mi
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asset-server-deployment
+  labels:
+    app: asset-server-deployment
+spec:
+  selector:
+    matchLabels:
+      app: asset-server-deployment
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: asset-server-deployment
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: asset-server
+        image: specifyconsortium/specify-asset-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: false
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        volumeMounts:
+        - name: attachments-volume
+          mountPath: /home/specify/attachments
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: attachments-volume
+        persistentVolumeClaim:
+          claimName: attachments-pvc
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 50Mi
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: report-runner-deployment
+  labels:
+    app: report-runner-deployment
+spec:
+  selector:
+    matchLabels:
+      app: report-runner-deployment
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: report-runner-deployment
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: report-runner
+        image: specifyconsortium/report-runner:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8088
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: false
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8088
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8088
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 50Mi
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: specify6-deployment
+  labels:
+    app: specify6-deployment
+spec:
+  selector:
+    matchLabels:
+      app: specify6-deployment
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: specify6-deployment
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: specify6
+        image: specifyconsortium/specify6-service:6.8.03
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: false
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "50m"
+        volumeMounts:
+        - name: specify6-volume
+          mountPath: /volumes/Specify6
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: specify6-volume
+        persistentVolumeClaim:
+          claimName: specify6-pvc
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 50Mi
+      restartPolicy: Always

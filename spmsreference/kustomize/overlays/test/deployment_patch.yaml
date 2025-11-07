@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spms-deployment
+  labels:
+    app: spms-test
+spec:
+  selector:
+    matchLabels:
+      app: spms-test
+  template:
+    metadata:
+      labels:
+        app: spms-test
+    spec:
+      initContainers:
+        - name: chown-files
+          image: busybox
+          command:
+            - /bin/chown
+            - -R
+            - '10001:10001'
+            - /usr/src/app/backend/files
+          volumeMounts:
+            - mountPath: /usr/src/app/backend/files
+              name: spms-media-test
+      containers:
+        - name: spms-backend
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: DATABASE_URL
+            - name: DEFAULT_FROM_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: DEFAULT_FROM_EMAIL
+            - name: ENVIRONMENT
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: ENVIRONMENT
+            - name: EXTERNAL_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: EXTERNAL_PASS
+            - name: IT_ASSETS_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: IT_ASSETS_ACCESS_TOKEN
+            - name: IT_ASSETS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: IT_ASSETS_USER
+            - name: LIBRARY_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: LIBRARY_API_URL
+            - name: LIBRARY_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: LIBRARY_BEARER_TOKEN
+            - name: PRINCE_SERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: PRINCE_SERVER_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: SECRET_KEY
+            - name: SENTRY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: SENTRY_URL
+            - name: SPMS_MAINTAINER_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: spms-env-test
+                  key: SPMS_MAINTAINER_EMAIL
+          volumeMounts:
+            - name: spms-media-test
+              mountPath: /usr/src/app/backend/files
+            - name: prince2-license-test
+              mountPath: /usr/lib/prince/license
+              readOnly: true
+      volumes:
+        - name: spms-media-test
+          persistentVolumeClaim:
+            claimName: spms-media-data-test
+        - name: prince2-license-test
+          configMap:
+            defaultMode: 420
+            name: prince2-license-test

@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+nameSuffix: -prod
+
+secretGenerator:
+  - name: specify-secrets
+    type: Opaque
+    envs:
+      - .env
+
+configMapGenerator:
+  - name: nginx-config
+    files:
+      - default.conf
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+resources:
+  - ../../base
+  - pvcs.yaml
+
+labels:
+  - includeSelectors: true
+    pairs:
+      variant: prod
+
+patches:
+  - path: deployment_patch.yaml
+  - path: deployment_hpa_patch.yaml
+  - path: service_patch.yaml
+
+images:
+  - name: specifyconsortium/specify7-service
+    newTag: v7.11.2
