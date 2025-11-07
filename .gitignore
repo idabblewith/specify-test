@@ -5,6 +5,9 @@ scripts/
 minikube-darwin-arm64
 test-local.sh
 RANCHER_ENVIRONMENT_VARIABLES.md
+.github/workflows/
+docker-compose-reference.yml
+README.md
 
 # IDE and editor files
 .vscode/
