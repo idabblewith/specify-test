@@ -1,18 +1,13 @@
 # Environment files (contain secrets)
-.env
-kustomize/overlays/*/.env
-scripts/
-minikube-darwin-arm64
-test-local.sh
-RANCHER_ENVIRONMENT_VARIABLES.md
-.github/workflows/
-docker-compose-reference.yml
-README.md
-buddy-kustomize/
-testing
-reference-compose
-docker-comps
-spmsreference
+.github
+*.env
+*.sql
+!kustomize/base/specify_dev_dump.sql
+kustomize/creds
+kustomize/overlays/prod/
+kustomize/overlays/uat/
+2_UAT_README.md
+3_PROD_README.md
 
 # IDE and editor files
 .vscode/

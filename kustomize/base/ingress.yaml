@@ -17,9 +17,9 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: specify
+            name: nginx
             port:
-              number: 8000
+              number: 80
   tls:
   - hosts:
     - specify.example.com  # Override this in overlays

@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: specify-storage
-spec:
-  storageClassName: azurefile
-  resources:
-    requests:
-      storage: 50Gi  # Larger storage for production

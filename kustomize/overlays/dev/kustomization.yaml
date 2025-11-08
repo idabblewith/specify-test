@@ -29,14 +29,20 @@ patches:
   target:
     kind: PersistentVolumeClaim
     name: specify-storage
+- path: mariadb-pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: mariadb-storage
+- path: asset-storage-pvc-patch.yaml
+  target:
+    kind: PersistentVolumeClaim
+    name: asset-storage
 
 # Add labels to all resources
-labels:
-- pairs:
-    environment: dev
-    managed-by: kustomize
+commonLabels:
+  environment: dev
+  managed-by: kustomize
 
 # Add common annotations
-annotations:
-- pairs:
-    version: v7.11.2
+commonAnnotations:
+  version: v7.11.2

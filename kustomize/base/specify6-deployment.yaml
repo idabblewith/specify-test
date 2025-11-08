@@ -1,22 +1,19 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: specify6
+  name: specify6-init
   labels:
     app: specify
     component: specify6
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: specify
-      component: specify6
+  ttlSecondsAfterFinished: 100
   template:
     metadata:
       labels:
         app: specify
         component: specify6
     spec:
+      restartPolicy: OnFailure
       containers:
       - name: specify6
         image: specifyconsortium/specify6-service:6.8.03
@@ -24,7 +21,7 @@ spec:
         - name: TZ
           value: "Australia/Perth"
         volumeMounts:
-        - name: specify6
+        - name: specify-storage
           mountPath: /volumes/Specify
         resources:
           requests:
@@ -34,6 +31,6 @@ spec:
             memory: "512Mi"
             cpu: "500m"
       volumes:
-      - name: specify6
+      - name: specify-storage
         persistentVolumeClaim:
           claimName: specify-storage
